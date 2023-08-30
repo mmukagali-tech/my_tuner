@@ -1,0 +1,5 @@
+{
+    "flavor": "production",
+    "target": "lib/main.dart",
+    "ENVIRONMENT": "production"
+}

@@ -1,0 +1,4 @@
+enum StorageKey {
+  locale,
+  themeMode,
+}

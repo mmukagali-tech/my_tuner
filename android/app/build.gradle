@@ -78,20 +78,20 @@ android {
         }
     }
 
-    flavorDimensions "default"
+    flavorDimensions "development"
     productFlavors { 
         production {
-            dimension "default"
+            dimension "production"
             applicationIdSuffix ""
             manifestPlaceholders = [appName: "My Tuner"]
         }
         staging {
-            dimension "default"
+            dimension "staging"
             applicationIdSuffix ".stg"
             manifestPlaceholders = [appName: "[STG] My Tuner"]
         }
         development {
-            dimension "default"
+            dimension "development"
             applicationIdSuffix ".dev"
             manifestPlaceholders = [appName: "[DEV] My Tuner"]
         }
