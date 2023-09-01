@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:mic_stream/mic_stream.dart';
 import 'package:my_tuner/src/core/constants/config.dart';
 
 // Teest
@@ -50,32 +51,23 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  static const platform = MethodChannel('audio_channel/methods');
-  static const eventChannel = EventChannel('audio_channel/events');
-
   final streamController = StreamController<double>();
+  StreamSubscription<Uint8List>? subscription;
 
-  Future<void> startRecording() async {
+  void startRecording() {
     try {
-      await platform.invokeMethod('startRecording');
+      MicStream.microphone(
+        audioFormat: AudioFormat.ENCODING_PCM_16BIT,
+      ).then((stream) {
+        if (stream != null) return setupIsolates(stream);
+        print('Microphone do not work');
+      });
     } catch (e) {
       print('Error starting recording: $e');
     }
   }
 
-  Future<void> stopRecording() async {
-    try {
-      await platform.invokeMethod('stopRecording');
-    } catch (e) {
-      print('Error on stopping recording: $e');
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    setupIsolates();
-  }
+  void stopRecording() => subscription?.cancel();
 
   @override
   void dispose() {
@@ -87,7 +79,7 @@ class _HomePageState extends State<HomePage> {
   late Isolate isolate;
   late ReceivePort rcvPort;
 
-  Future<void> setupIsolates() async {
+  Future<void> setupIsolates(Stream<Uint8List> stream) async {
     rcvPort = ReceivePort();
     isolate = await Isolate.spawn(
       entryPoint,
@@ -103,9 +95,8 @@ class _HomePageState extends State<HomePage> {
 
     final send2Isolate = await completer.future;
 
-    eventChannel.receiveBroadcastStream().listen((event) {
-      if (event is List<int>) send2Isolate.send(event);
-    });
+    subscription = stream.listen(send2Isolate.send);
+    setState(() {});
   }
 
   @override
