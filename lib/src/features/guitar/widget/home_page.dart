@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:mic_stream/mic_stream.dart';
 import 'package:my_tuner/src/core/constants/config.dart';
+import 'package:my_tuner/src/features/guitar/enums/guitar_string.dart';
 
 // Teest
 void entryPoint(SendPort send2main) {
@@ -11,13 +13,13 @@ void entryPoint(SendPort send2main) {
   send2main.send(rcvPort.sendPort);
 
   rcvPort.listen((message) {
-    if (message is! List<int>) return;
-    final frequency = detectPitch(message);
+    if (message is! (List<int>, double)) return;
+    final frequency = detectPitch(message.$1, message.$2);
     send2main.send(frequency);
   });
 }
 
-double detectPitch(List<int> audioSamples, [int sampleRate = 44100]) {
+double detectPitch(List<int> audioSamples, double sampleRate) {
   var maxCorrelation = 0;
   var maxDelay = 0;
 
@@ -50,26 +52,30 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  static const platform = MethodChannel('audio_channel/methods');
-  static const eventChannel = EventChannel('audio_channel/events');
-
   final streamController = StreamController<double>();
+  StreamSubscription<Uint8List>? subscription;
+  StringTune? selected;
+  static const guitar = ClassicAcousticGuitar();
 
-  Future<void> startRecording() async {
+  Future<void> change(StringTune? value) async {
     try {
-      await platform.invokeMethod('startRecording');
+      selected = value;
+
+      await MicStream.microphone(
+        audioFormat: AudioFormat.ENCODING_PCM_16BIT,
+      ).then((stream) async {
+        if (stream == null) return print('Microphone do not work');
+
+        await subscription?.cancel();
+        subscription = stream.listen((data) => send2Isolate.send((data, selected?.value)));
+        setState(() {});
+      });
     } catch (e) {
       print('Error starting recording: $e');
     }
   }
 
-  Future<void> stopRecording() async {
-    try {
-      await platform.invokeMethod('stopRecording');
-    } catch (e) {
-      print('Error on stopping recording: $e');
-    }
-  }
+  void stopRecording() => subscription?.cancel();
 
   @override
   void initState() {
@@ -86,6 +92,7 @@ class _HomePageState extends State<HomePage> {
 
   late Isolate isolate;
   late ReceivePort rcvPort;
+  late SendPort send2Isolate;
 
   Future<void> setupIsolates() async {
     rcvPort = ReceivePort();
@@ -101,11 +108,7 @@ class _HomePageState extends State<HomePage> {
       if (message is double) streamController.sink.add(message);
     });
 
-    final send2Isolate = await completer.future;
-
-    eventChannel.receiveBroadcastStream().listen((event) {
-      if (event is List<int>) send2Isolate.send(event);
-    });
+    send2Isolate = await completer.future;
   }
 
   @override
@@ -119,13 +122,16 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            ElevatedButton(
-              onPressed: startRecording,
-              child: const Text('Start'),
-            ),
-            ElevatedButton(
-              onPressed: stopRecording,
-              child: const Text('Stop'),
+            Row(
+              children: guitar.strings.map((e) {
+                return Checkbox(
+                  value: selected == e,
+                  onChanged: (v) {
+                    if (v == null || !v) return;
+                    change(e);
+                  },
+                );
+              }).toList(),
             ),
             StreamBuilder(
               stream: streamController.stream,
